@@ -4,9 +4,7 @@ const cheerio = require("cheerio");
 const cors = require("cors");
 const rs = require("request");
 const port = 5000;
-
 app.use(cors());
-
 const baseURL = "https://gogoanime.so/";
 
 app.get("/api/home", (req, res) => {
@@ -77,11 +75,6 @@ app.get("/api/details/:id", (req, res) => {
           } else if ("Genre: " == $(this).children("span").text()) {
             genres = $(this).text().slice(20, -4);
             genres = genres.split(",");
-
-            genres = genres.filter((word) => word != " Ecchi");
-            genres = genres.filter((word) => word != " Harem");
-            genres = genres.filter((word) => word != "Ecchi");
-            genres = genres.filter((word) => word != "Harem");
             genres = genres.join(",");
           } else "Other name: " == $(this).children("span").text();
           {
@@ -159,6 +152,7 @@ async function getLink(Link) {
 app.get("/api/watching/:id/:episode", (req, res) => {
   let link = "";
   let nl = [];
+  var totalepisode = [];
   var id = req.params.id;
   var episode = req.params.episode;
   url = `${baseURL + id}-episode-${episode}`;
@@ -166,9 +160,20 @@ app.get("/api/watching/:id/:episode", (req, res) => {
     if (!err) {
       try {
         var $ = cheerio.load(html);
+
         if ($(".entry-title").text() === "404") {
-          return res.status(404).json({ links: [], link });
+          return res
+            .status(404)
+            .json({ links: [], link, totalepisode: totalepisode });
         }
+
+        totalepisode = $("#episode_page")
+          .children("li")
+          .last()
+          .children("a")
+          .text()
+          .split("-");
+        totalepisode = totalepisode[totalepisode.length - 1];
         link = $("li.anime").children("a").attr("data-video");
         const cl = "http:" + link.replace("streaming.php", "download");
         rs(cl, (err, resp, html) => {
@@ -177,17 +182,26 @@ app.get("/api/watching/:id/:episode", (req, res) => {
               var $ = cheerio.load(html);
               $("a").each((i, e) => {
                 if (e.attribs.download === "") {
-                  nl.push(e.attribs.href);
+                  nl.push({
+                    link: e.attribs.href,
+                    name: e.children[0].data.slice(21),
+                  });
                 }
               });
-              return res.status(200).json({ links: nl, link });
+              return res
+                .status(200)
+                .json({ links: nl, link, totalepisode: totalepisode });
             } catch (e) {
-              return res.status(200).json({ links: nl, link });
+              return res
+                .status(200)
+                .json({ links: nl, link, totalepisode: totalepisode });
             }
           }
         });
       } catch (e) {
-        return res.status(404).json({ links: [], link: "" });
+        return res
+          .status(404)
+          .json({ links: [], link: "", totalepisode: totalepisode });
       }
     }
   });
@@ -269,9 +283,6 @@ app.get("/api/genrelist", (req, res) => {
           .each(function (index, element) {
             list[index] = $(this).text();
           });
-
-        list = list.filter((word) => word != "Ecchi");
-        list = list.filter((word) => word != "Harem");
 
         res.status(200).json({ list });
       } catch (e) {
